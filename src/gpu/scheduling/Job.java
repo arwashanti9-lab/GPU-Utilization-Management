@@ -3,30 +3,31 @@ package gpu.scheduling;
 import java.io.Serializable;
 import java.time.LocalDateTime;
 
-/** A job record. The scheduler owns changes to its execution state. */
-public final class Job implements Serializable {
-    private static final long serialVersionUID = 1L;
-
+// the 4 states a job can be in
     public enum Status { QUEUED, RUNNING, COMPLETED, CANCELLED }
 
-    // Package access allows Scheduler to update execution state.
-    final String id;
-    final String studentId;
-    final String title;
-    final String application;
-    final String description;
-    final int duration;
-    final LocalDateTime submissionTime;
+    //Attributes 
+    // no private here so the Scheduler can change them directly
 
-    Status status;
-    int gpuId; // 0 means no GPU has been assigned.
-    LocalDateTime started;
-    LocalDateTime finished;
-    int charged;
-    LocalDateTime cancelledAt;
-    String cancelledBy;
-    String cancellationReason;
+final String id;
+final String studentId;
+final String title;
+final String application;
+final String description;
+final int duration;
+final LocalDateTime submissionTime;
 
+Status status;
+int gpuId; // if 0 that means there has been no value entered yet
+LocalDateTime started;
+LocalDate finished;
+int charged;
+LocalDateTime calledBy;
+String cancelledBy;
+String cancellationReason;
+
+        //Constructors
+// full constructor, checks the inputs before setting them
     public Job(String id, String studentId, String title, String application,
                String description, int duration, LocalDateTime submissionTime) {
         this.id = required(id, "Job ID");
@@ -34,18 +35,22 @@ public final class Job implements Serializable {
         this.title = required(title, "Title");
         this.application = required(application, "Application name");
         this.description = required(description, "Description");
+
+        // only these 4 durations are allowed
         if (duration != 5 && duration != 15 && duration != 30 && duration != 60) {
             throw new IllegalArgumentException("Duration must be 5, 15, 30, or 60 minutes.");
         }
         this.duration = duration;
+
         if (submissionTime == null) {
             throw new IllegalArgumentException("Submission time is required.");
         }
         this.submissionTime = submissionTime;
+
+        // every new job starts in the queue
         this.status = Status.QUEUED;
     }
-
-    /** Creates an independent snapshot of a job for display and history. */
+// copy constructor, makes a separate copy of the job for display/history
     public Job(Job other) {
         if (other == null) {
             throw new IllegalArgumentException("Job is required.");
@@ -67,6 +72,8 @@ public final class Job implements Serializable {
         this.cancellationReason = other.cancellationReason;
     }
 
+    // Helper 
+    // makes sure the text is not null or empty, and removes extra spaces
     private static String required(String value, String label) {
         if (value == null || value.trim().isEmpty()) {
             throw new IllegalArgumentException(label + " is required.");
@@ -74,20 +81,36 @@ public final class Job implements Serializable {
         return value.trim();
     }
 
-    public String getId() { return id; }
-    public String getStudentId() { return studentId; }
-    public String getTitle() { return title; }
-    public String getApplication() { return application; }
-    public String getDescription() { return description; }
+    // Getters 
+    public String getId() { 
+        return id; }
+    public String getStudentId() { 
+        return studentId; }
+    public String getTitle() { 
+        return title; }
+    public String getApplication() { 
+        return application; }
+    public String getDescription() { 
+        return description; }
     public int getDuration() { return duration; }
-    public int getWorkloadUnits() { return duration; }
-    public LocalDateTime getSubmissionTime() { return submissionTime; }
-    public Status getStatus() { return status; }
-    public int getGpuId() { return gpuId; }
-    public LocalDateTime getStarted() { return started; }
-    public LocalDateTime getFinished() { return finished; }
-    public int getCharged() { return charged; }
-    public LocalDateTime getCancelledAt() { return cancelledAt; }
-    public String getCancelledBy() { return cancelledBy; }
-    public String getCancellationReason() { return cancellationReason; }
+    public int getWorkloadUnits() { 
+        return duration; } // same as the duration
+    public LocalDateTime getSubmissionTime() { 
+        return submissionTime; }
+    public Status getStatus() { 
+        return status; }
+    public int getGpuId() { 
+        return gpuId; }
+    public LocalDateTime getStarted() { 
+        return started; }
+    public LocalDateTime getFinished() { 
+        return finished; }
+    public int getCharged() { 
+        return charged; }
+    public LocalDateTime getCancelledAt() { 
+        return cancelledAt; }
+    public String getCancelledBy() { 
+        return cancelledBy; }
+    public String getCancellationReason() { 
+        return cancellationReason; }
 }
