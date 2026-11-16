@@ -76,5 +76,33 @@ public JobService(AccountService accounts, Scheduler scheduler) {
             }
         }
     }
+  //Helpers
+  //matches job with id 
+  private Jov findJob(String id){
+    for(Job job: scheduler.getJobs())if (job.getId().equals(id.trim())) {
+                return job;
+            }
+        }
+        throw new IllegalArgumentException("Job not found.");
+    }
 
-    
+//formats the id as JOB-000000 , the number will maintain the six digits to stay accurate
+  private String nextJobId(){
+    int highest=0;
+    for (Job job : scheduler.getJobs()){
+      String id = job.getId();
+            // only look at ids in the format JOB-######
+            if (id.matches("JOB-[0-9]{6}")) {
+                int number = Integer.parseInt(id.substring(4)); // remove "JOB-"
+                if (number > highest) {
+                    highest = number;
+                }
+            }
+        }
+// 999999 is the highest it can go
+    if (highest>=999999){
+      throw new IllegalStateException("No more job IDs available.");
+       }
+        return String.format("JOB-%06d", highest + 1);
+    }
+      
