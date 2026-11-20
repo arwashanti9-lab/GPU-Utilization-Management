@@ -7,16 +7,20 @@ units are not NVIDIA H100 performance measurements.
 ## Features
 
 - Student registration with administrator approval and account balances.
-- Admin allowance adjustments with recorded reasons.
+- Admin allowance adjustments with recorded administrator, simulated time,
+  and reason.
 - Student job submission, history search, and cancellation.
-- Role-specific Swing dashboards with a slate navigation rail, four GPU cards,
-  allowance summary cards, and clearly labelled status and history columns.
+- Role-specific Swing screens matching the course-guide flows: combined login,
+  student registration, student Home/My jobs, and administrator
+  Dashboard/Requests/Students/All jobs tabs.
 - One FCFS queue, deterministic GPU assignment, minute-by-minute simulation,
   predicted starts/finishes, wait times, and utilization.
 - Completed and cancelled job history, including runtime charges and reasons.
 - Separate account and scheduler snapshots. The simulation pauses while the
   application is closed; the saved clock and running jobs resume on restart.
-- Initial simulation date and time are selected with Swing date/time controls.
+- The administrator sets the initial simulation date and time with Swing
+  date/time pickers after signing in for the first time. Until then, job
+  submission and clock advancement are disabled.
 
 The predefined administrator credentials are `admin` / `gpu2026`. Each
 approved student signs in using their university ID and chosen password.
@@ -36,9 +40,9 @@ javac -encoding UTF-8 -d out (Get-ChildItem -Path src -Recurse -Filter *.java | 
 java -cp out gpu.accounts.Main
 ```
 
-The first launch asks for an initial simulation date and time. By default,
-the program stores account data in `data/accounts.dat` and the simulation in
-`data/simulation.dat`. Pass alternative paths as the first and second
+On the first administrator sign-in, choose the simulation date and time.
+By default, the program stores account data in `data/accounts.dat` and the
+simulation in `data/simulation.dat`. Pass alternative paths as the first and second
 arguments:
 
 ```powershell
@@ -156,11 +160,14 @@ classDiagram
         +submitJob(...) String
         +cancelJob(...)
         +advanceMinute()
+        +initializeClock(start)
     }
     class Scheduler {
         -LocalDateTime initialTime
         -LocalDateTime now
         -Map jobs
+        +initializeClock(start)
+        +isClockInitialized() boolean
         +advanceMinute()
         +predictions() Map
         +getUtilization() OptionalDouble
