@@ -39,6 +39,10 @@ public final class AccountFrame extends JFrame {
     private DefaultTableModel students;
     private DefaultTableModel dashboardJobs;
     private DefaultTableModel studentJobs;
+    private DefaultTableModel waitingJobs;
+    private DefaultTableModel completedJobs;
+    private DefaultTableModel allJobs;
+    private DefaultTableModel balances;
     private JPanel gpuCards;
     private JPanel dashboardSummary;
     private MetricCard queuedMetric;
@@ -52,11 +56,26 @@ public final class AccountFrame extends JFrame {
     private MetricCard usedMetric;
     private MetricCard reservedMetric;
     private JLabel clockLabel;
-    private JLabel dashboardBalances;
     private JTextArea studentJobDetails;
     private JTextField search;
     private JButton adminCancelButton;
     private JButton studentCancelButton;
+    private JButton approveRequestButton;
+    private JButton customApproveRequestButton;
+    private JButton rejectRequestButton;
+    private JComboBox<String> requestStatusFilter;
+    private JComboBox<String> studentJobStatusFilter;
+    private JComboBox<String> allJobStatusFilter;
+    private JTextField studentJobSearch;
+    private JTextField allJobSearch;
+    private TableRowSorter<DefaultTableModel> requestSorter;
+    private TableRowSorter<DefaultTableModel> studentJobSorter;
+    private TableRowSorter<DefaultTableModel> allJobSorter;
+    private JTable requestTable;
+    private JTable allJobsTable;
+    private JTable studentJobsTable;
+    private JTable completedJobsTable;
+    private JTable waitingJobsTable;
 
     // Displays the selected student's information and history.
     private final JTextArea details = new JTextArea();
@@ -69,8 +88,8 @@ public final class AccountFrame extends JFrame {
         this.jobs = jobs;
         UIManager.put("Panel.background", BACKGROUND);
         UIManager.put("Label.foreground", TEXT);
-        UIManager.put("TextField.font", new Font("Segoe UI", Font.PLAIN, 13));
-        UIManager.put("TextArea.font", new Font("Segoe UI", Font.PLAIN, 13));
+        UIManager.put("TextField.font", new Font("Segoe UI", Font.PLAIN, 15));
+        UIManager.put("TextArea.font", new Font("Segoe UI", Font.PLAIN, 15));
 
         // Close the application when the window is closed.
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -81,8 +100,8 @@ public final class AccountFrame extends JFrame {
                 BorderFactory.createEmptyBorder(18, 18, 18, 18)
         );
 
-        setMinimumSize(new Dimension(980, 650));
-        setSize(1280, 820);
+        setMinimumSize(new Dimension(900, 620));
+        setSize(1180, 760);
         setLocationRelativeTo(null);
 
         // The first screen displayed is the login screen.
@@ -97,13 +116,16 @@ public final class AccountFrame extends JFrame {
     // Creates a button and attaches its action.
     private JButton button(String text, Action action) {
         JButton button = new JButton(text);
-        button.setFont(new Font("Segoe UI", Font.PLAIN, 13));
-        button.setFocusPainted(false);
+        button.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        button.setFocusPainted(true);
         button.setOpaque(true);
         if ("Advance Minute".equals(text) || "Submit job".equals(text)) {
             button.setBackground(new Color(24, 164, 139));
             button.setForeground(Color.WHITE);
-            button.setBorder(BorderFactory.createEmptyBorder(9, 14, 9, 14));
+            button.setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createLineBorder(new Color(17, 135, 116)),
+                    BorderFactory.createEmptyBorder(9, 14, 9, 14)
+            ));
         } else {
             button.setBackground(Color.WHITE);
             button.setForeground(TEXT);
@@ -195,11 +217,11 @@ public final class AccountFrame extends JFrame {
             ));
 
             JLabel heading = new JLabel(title);
-            heading.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+            heading.setFont(new Font("Segoe UI", Font.PLAIN, 14));
             heading.setForeground(new Color(65, 77, 91));
 
             value = new JLabel(initial);
-            value.setFont(new Font("Segoe UI", Font.BOLD, 24));
+            value.setFont(new Font("Segoe UI", Font.BOLD, 26));
             value.setForeground(TEXT);
 
             add(heading, BorderLayout.NORTH);
@@ -218,7 +240,7 @@ public final class AccountFrame extends JFrame {
     private JButton navigationButton(String label, boolean selected) {
         JButton button = new JButton(label);
         button.setHorizontalAlignment(SwingConstants.LEFT);
-        button.setFocusPainted(false);
+        button.setFocusPainted(true);
         button.setBorderPainted(false);
         button.setOpaque(true);
         button.setForeground(Color.WHITE);
@@ -226,113 +248,158 @@ public final class AccountFrame extends JFrame {
                 ? new Color(72, 94, 114)
                 : SIDEBAR);
         button.setBorder(BorderFactory.createEmptyBorder(12, 16, 12, 12));
-        button.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        button.setFont(new Font("Segoe UI", Font.PLAIN, 15));
         return button;
     }
 
     // Displays the login form.
     private void showLogin() {
-        reset("GPU Management | Sign in");
+        body.removeAll();
+        body.setBackground(BACKGROUND);
+        JPanel page = new JPanel(new GridBagLayout());
+        page.setBackground(BACKGROUND);
 
-        JTextField username = new JTextField(22);
-        JPasswordField password = new JPasswordField(22);
+        JPanel card = cardPanel(new BorderLayout(0, 0));
+        card.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(BORDER),
+                BorderFactory.createEmptyBorder(30, 34, 24, 34)
+        ));
+        card.setPreferredSize(new Dimension(460, 470));
 
-        JPanel center = new JPanel(new GridBagLayout());
-        JPanel box = new JPanel(new BorderLayout(12, 18));
+        JPanel content = new JPanel();
+        content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
+        content.setBackground(Color.WHITE);
 
-        box.add(
-                form(
-                        new String[]{
-                                "Username / university ID",
-                                "Password"
-                        },
-                        new JComponent[]{username, password}
-                ),
-                BorderLayout.CENTER
-        );
+        JLabel heading = new JLabel("GPU Utilization Management");
+        heading.setFont(new Font("Segoe UI", Font.BOLD, 24));
+        heading.setForeground(TEXT);
+        heading.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JLabel subtitle = new JLabel("4 × NVIDIA H100 · Simulated");
+        subtitle.setFont(new Font("Segoe UI", Font.PLAIN, 15));
+        subtitle.setForeground(MUTED);
+        subtitle.setAlignmentX(Component.LEFT_ALIGNMENT);
+        content.add(heading);
+        content.add(Box.createVerticalStrut(5));
+        content.add(subtitle);
+        content.add(Box.createVerticalStrut(26));
 
-        JPanel actions = new JPanel();
+        JTextField username = new JTextField();
+        JPasswordField password = new JPasswordField();
+        styleInput(username);
+        styleInput(password);
+        content.add(labeledField("Username / university ID", username));
+        content.add(Box.createVerticalStrut(16));
+        content.add(labeledField("Password", password));
+        content.add(Box.createVerticalStrut(14));
 
-        actions.add(button("Sign in", () -> {
+        JLabel message = new JLabel(" ");
+        message.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        message.setForeground(new Color(159, 73, 62));
+        message.setAlignmentX(Component.LEFT_ALIGNMENT);
+        message.setPreferredSize(new Dimension(380, 38));
+        content.add(message);
+        content.add(Box.createVerticalStrut(4));
+
+        JButton signIn = button("Sign in", () -> {
             char[] characters = password.getPassword();
-
             try {
-                service.login(
-                        username.getText(),
-                        new String(characters)
-                );
-
+                service.login(username.getText(), new String(characters));
+                if (service.getCurrentUser().getRole()
+                        == Role.ADMINISTRATOR) {
+                    showAdmin();
+                } else {
+                    showStudent();
+                }
+            } catch (IllegalArgumentException exception) {
+                message.setText("<html>" + escapeHtml(exception.getMessage())
+                        + "</html>");
+                username.requestFocusInWindow();
             } finally {
-                // Clear the entered password after the login attempt.
                 java.util.Arrays.fill(characters, '\0');
                 password.setText("");
             }
+        });
+        signIn.setAlignmentX(Component.LEFT_ALIGNMENT);
+        signIn.setPreferredSize(new Dimension(390, 44));
+        signIn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 44));
+        content.add(signIn);
 
-            // Display the screen appropriate for the signed-in user.
-            if (service.getCurrentUser().getRole()
-                    == Role.ADMINISTRATOR) {
+        JButton register = new JButton("New student? Request an account");
+        register.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        register.setForeground(new Color(36, 104, 143));
+        register.setBorderPainted(false);
+        register.setContentAreaFilled(false);
+        register.setFocusPainted(true);
+        register.setAlignmentX(Component.LEFT_ALIGNMENT);
+        register.addActionListener(event -> showRegistration());
+        content.add(Box.createVerticalStrut(12));
+        content.add(register);
 
-                showAdmin();
-            } else {
-                showStudent();
-            }
-        }));
-
-        actions.add(
-                button("Register as a student", this::showRegistration)
-        );
-
-        box.add(actions, BorderLayout.SOUTH);
-        center.add(box);
-
-        body.add(center, BorderLayout.CENTER);
-
-        body.add(
-                new JLabel(
-                        "Students sign in after administrator approval."
-                ),
-                BorderLayout.SOUTH
-        );
-
+        card.add(content, BorderLayout.CENTER);
+        page.add(card);
+        body.add(page, BorderLayout.CENTER);
+        getRootPane().setDefaultButton(signIn);
+        SwingUtilities.invokeLater(() -> username.requestFocusInWindow());
         redraw();
     }
 
     // Displays the student registration form.
     private void showRegistration() {
-        reset("Student registration");
+        body.removeAll();
+        body.setBackground(BACKGROUND);
+        JPanel page = new JPanel(new GridBagLayout());
+        page.setBackground(BACKGROUND);
+        JPanel card = cardPanel(new BorderLayout(0, 0));
+        card.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(BORDER),
+                BorderFactory.createEmptyBorder(26, 34, 24, 34)
+        ));
+        card.setPreferredSize(new Dimension(540, 660));
+
+        JPanel content = new JPanel();
+        content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
+        content.setBackground(Color.WHITE);
+        JLabel heading = new JLabel("Request a student account");
+        heading.setFont(new Font("Segoe UI", Font.BOLD, 23));
+        heading.setForeground(TEXT);
+        heading.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JLabel subtitle = new JLabel(
+                "Complete the five fields below. Job details are not needed."
+        );
+        subtitle.setForeground(MUTED);
+        subtitle.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        subtitle.setAlignmentX(Component.LEFT_ALIGNMENT);
+        content.add(heading);
+        content.add(Box.createVerticalStrut(6));
+        content.add(subtitle);
+        content.add(Box.createVerticalStrut(18));
 
         JTextField id = new JTextField();
         JTextField name = new JTextField();
         JTextField email = new JTextField();
         JTextField phone = new JTextField();
-
         JPasswordField password = new JPasswordField();
+        JComponent[] fields = {id, name, email, phone, password};
+        String[] labels = {
+                "University ID", "Full name", "Email",
+                "Phone number", "Chosen password"
+        };
+        for (int i = 0; i < fields.length; i++) {
+            styleInput(fields[i]);
+            content.add(labeledField(labels[i], fields[i]));
+            content.add(Box.createVerticalStrut(10));
+        }
 
-        JPanel center = new JPanel(new BorderLayout(10, 20));
+        JLabel message = new JLabel(" ");
+        message.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        message.setForeground(new Color(159, 73, 62));
+        message.setAlignmentX(Component.LEFT_ALIGNMENT);
+        message.setPreferredSize(new Dimension(420, 40));
+        content.add(message);
 
-        center.add(
-                form(
-                        new String[]{
-                                "University ID",
-                                "Full name",
-                                "Email",
-                                "Phone",
-                                "Chosen password"
-                        },
-                        new JComponent[]{
-                                id, name, email, phone, password
-                        }
-                ),
-                BorderLayout.NORTH
-        );
-
-        JPanel actions = new JPanel();
-
-        actions.add(button("Submit request", () -> {
+        JButton submit = button("Submit registration request", () -> {
             char[] characters = password.getPassword();
-
             try {
-                // AccountService checks the inputs and saves the request.
                 service.register(
                         id.getText(),
                         name.getText(),
@@ -340,26 +407,76 @@ public final class AccountFrame extends JFrame {
                         phone.getText(),
                         new String(characters)
                 );
-
+                JOptionPane.showMessageDialog(
+                        this,
+                        "Request submitted. Wait for administrator approval.",
+                        "Registration submitted",
+                        JOptionPane.INFORMATION_MESSAGE
+                );
+                showLogin();
+            } catch (IllegalArgumentException exception) {
+                message.setText("<html>" + escapeHtml(exception.getMessage())
+                        + "</html>");
             } finally {
                 java.util.Arrays.fill(characters, '\0');
                 password.setText("");
             }
+        });
+        submit.setAlignmentX(Component.LEFT_ALIGNMENT);
+        submit.setPreferredSize(new Dimension(420, 44));
+        submit.setMaximumSize(new Dimension(Integer.MAX_VALUE, 44));
+        JButton back = new JButton("Back to sign in");
+        back.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        back.setForeground(new Color(36, 104, 143));
+        back.setBorderPainted(false);
+        back.setContentAreaFilled(false);
+        back.setAlignmentX(Component.LEFT_ALIGNMENT);
+        back.addActionListener(event -> showLogin());
+        content.add(Box.createVerticalStrut(8));
+        content.add(submit);
+        content.add(Box.createVerticalStrut(8));
+        content.add(back);
 
-            JOptionPane.showMessageDialog(
-                    this,
-                    "Request submitted. Wait for administrator approval."
-            );
-
-            showLogin();
-        }));
-
-        actions.add(button("Back", this::showLogin));
-
-        body.add(center, BorderLayout.CENTER);
-        body.add(actions, BorderLayout.SOUTH);
-
+        card.add(content, BorderLayout.CENTER);
+        page.add(card);
+        body.add(page, BorderLayout.CENTER);
+        getRootPane().setDefaultButton(submit);
         redraw();
+    }
+
+    private static void styleInput(JComponent input) {
+        input.setFont(new Font("Segoe UI", Font.PLAIN, 15));
+        input.setForeground(TEXT);
+        input.setBackground(Color.WHITE);
+        input.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(196, 207, 218)),
+                BorderFactory.createEmptyBorder(7, 10, 7, 10)
+        ));
+        input.setPreferredSize(new Dimension(390, 42));
+        input.setMaximumSize(new Dimension(Integer.MAX_VALUE, 42));
+    }
+
+    private static JPanel labeledField(String label, JComponent input) {
+        JPanel group = new JPanel();
+        group.setLayout(new BoxLayout(group, BoxLayout.Y_AXIS));
+        group.setBackground(Color.WHITE);
+        group.setAlignmentX(Component.LEFT_ALIGNMENT);
+        group.setMaximumSize(new Dimension(Integer.MAX_VALUE, 68));
+        JLabel heading = new JLabel(label);
+        heading.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        heading.setForeground(TEXT);
+        heading.setAlignmentX(Component.LEFT_ALIGNMENT);
+        input.setAlignmentX(Component.LEFT_ALIGNMENT);
+        group.add(heading);
+        group.add(Box.createVerticalStrut(5));
+        group.add(input);
+        return group;
+    }
+
+    private static String escapeHtml(String text) {
+        return text.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;");
     }
 
     // Creates a table model that users cannot edit directly.
@@ -376,8 +493,8 @@ public final class AccountFrame extends JFrame {
     private JTable table(DefaultTableModel model) {
         JTable table = new JTable(model);
 
-        table.setRowHeight(28);
-        table.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        table.setRowHeight(34);
+        table.setFont(new Font("Segoe UI", Font.PLAIN, 14));
         table.setForeground(TEXT);
         table.setBackground(Color.WHITE);
         table.setGridColor(BORDER);
@@ -388,7 +505,7 @@ public final class AccountFrame extends JFrame {
                 ListSelectionModel.SINGLE_SELECTION
         );
         table.getTableHeader().setFont(
-                new Font("Segoe UI", Font.BOLD, 12)
+                new Font("Segoe UI", Font.BOLD, 14)
         );
         table.getTableHeader().setBackground(new Color(237, 241, 246));
         table.getTableHeader().setForeground(TEXT);
@@ -417,7 +534,7 @@ public final class AccountFrame extends JFrame {
                     setForeground(statusForeground(label));
                 } else {
                     setHorizontalAlignment(SwingConstants.LEADING);
-                    setFont(new Font("Segoe UI", Font.PLAIN, 13));
+                    setFont(new Font("Segoe UI", Font.PLAIN, 14));
                     setBackground(selected
                             ? new Color(222, 237, 244)
                             : Color.WHITE);
@@ -477,14 +594,110 @@ public final class AccountFrame extends JFrame {
         return String.valueOf(table.getModel().getValueAt(modelRow, 0));
     }
 
+    private static String[] fullJobColumns() {
+        return new String[]{
+                "ID", "Student", "Application", "Task size",
+                "Workload units", "Estimated duration", "Status",
+                "Queue position", "Predicted start", "Predicted finish",
+                "Remaining wait", "GPU", "Submission time", "Actual start",
+                "Actual finish", "Runtime used", "Total queue wait",
+                "Allowance charged", "Result", "Cancelled at",
+                "Cancelled by", "Reason"
+        };
+    }
+
+    private Object[] jobRow(Job job, Prediction prediction) {
+        long runtime = job.getStartTime() == null
+                ? 0
+                : ChronoUnit.MINUTES.between(
+                        job.getStartTime(),
+                        job.getFinishTime() == null
+                                ? jobs.getNow() : job.getFinishTime()
+                );
+        Long queueWait = job.getStartTime() == null
+                ? null
+                : ChronoUnit.MINUTES.between(
+                        job.getSubmissionTime(), job.getStartTime()
+                );
+
+        return new Object[]{
+                job.getId(),
+                job.getStudentId(),
+                job.getApplication(),
+                job.getTaskSize(),
+                job.getWorkloadUnits(),
+                job.getDuration() + " min",
+                job.getStatus(),
+                prediction == null ? "-" : prediction.queuePosition(),
+                prediction == null ? "-" : time(prediction.start()),
+                prediction == null ? "-" : time(prediction.finish()),
+                prediction == null ? "-" : prediction.remainingWait(),
+                job.getGpuId() == null ? "-" : job.getGpuId(),
+                time(job.getSubmissionTime()),
+                time(job.getStartTime()),
+                time(job.getFinishTime()),
+                runtime,
+                queueWait == null ? "-" : queueWait,
+                job.getChargedMinutes(),
+                job.getResult() == null ? "-" : job.getResult(),
+                time(job.getCancellationTime()),
+                job.getCancelledBy() == null ? "-" : job.getCancelledBy(),
+                job.getCancellationReason() == null
+                        ? "-" : job.getCancellationReason()
+        };
+    }
+
+    private static void updateTableFilter(
+            TableRowSorter<DefaultTableModel> sorter,
+            JTextField searchField,
+            JComboBox<String> statusFilter,
+            int statusColumn,
+            int... searchColumns
+    ) {
+        List<RowFilter<DefaultTableModel, Integer>> filters =
+                new java.util.ArrayList<>();
+
+        String query = searchField.getText().trim();
+        if (!query.isEmpty()) {
+            String escaped = "(?i)" + java.util.regex.Pattern.quote(query);
+            List<RowFilter<DefaultTableModel, Integer>> searchFilters =
+                    new java.util.ArrayList<>();
+            for (int column : searchColumns) {
+                searchFilters.add(RowFilter.regexFilter(escaped, column));
+            }
+            filters.add(RowFilter.orFilter(searchFilters));
+        }
+
+        String status = String.valueOf(statusFilter.getSelectedItem());
+        if (!"All statuses".equals(status)) {
+            filters.add(RowFilter.regexFilter(
+                    "^" + java.util.regex.Pattern.quote(status) + "$",
+                    statusColumn
+            ));
+        }
+        sorter.setRowFilter(filters.isEmpty()
+                ? null : RowFilter.andFilter(filters));
+    }
+
+    private boolean selectedRequestIsPending(JTable table) {
+        int selected = table.getSelectedRow();
+        if (selected < 0) {
+            return false;
+        }
+        int row = table.convertRowIndexToModel(selected);
+        return "PENDING".equals(
+                String.valueOf(table.getModel().getValueAt(row, 4))
+        );
+    }
+
     // Asks the user to enter a whole number of minutes.
-    private int minutes(String prompt, int initial) {
+    private Integer minutes(String prompt, int initial) {
         String value = JOptionPane.showInputDialog(
                 this, prompt, initial
         );
 
         if (value == null) {
-            throw new IllegalArgumentException("Action cancelled.");
+            return null;
         }
 
         try {
@@ -509,17 +722,31 @@ public final class AccountFrame extends JFrame {
     private void showAdmin() throws IOException {
         reset("Administrator dashboard");
 
-        // First tab: review student registration requests.
+        // Review all requests while filtering decisions by status.
         requests = model(
                 "University ID", "Name", "Email", "Phone", "Status"
         );
 
-        JTable requestTable = table(requests);
+        requestTable = table(requests);
+        requestSorter = new TableRowSorter<>(requests);
+        requestTable.setRowSorter(requestSorter);
 
         JPanel         requestPanel =
                 cardPanel(new BorderLayout(10, 10));
-        requestPanel.add(new JLabel("Registration requests"),
+        JPanel requestHeader = new JPanel(new BorderLayout(8, 8));
+        requestHeader.setBackground(Color.WHITE);
+        requestHeader.add(new JLabel("Registration requests and decisions"),
                 BorderLayout.NORTH);
+        JPanel requestFilterPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        requestFilterPanel.setBackground(Color.WHITE);
+        requestFilterPanel.add(new JLabel("Status:"));
+        requestStatusFilter = new JComboBox<>(new String[]{
+                "All statuses", "PENDING", "APPROVED", "REJECTED"
+        });
+        requestStatusFilter.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        requestFilterPanel.add(requestStatusFilter);
+        requestHeader.add(requestFilterPanel, BorderLayout.SOUTH);
+        requestPanel.add(requestHeader, BorderLayout.NORTH);
 
         requestPanel.add(
                 new JScrollPane(requestTable),
@@ -527,42 +754,69 @@ public final class AccountFrame extends JFrame {
         );
 
         JPanel requestActions = new JPanel();
+        requestActions.setBackground(Color.WHITE);
 
         // Approve the selected request with the default allowance.
-        requestActions.add(
-                button("Approve (100 minutes)", () -> {
+        approveRequestButton = button("Approve (100 minutes)", () -> {
                     service.approve(selectedId(requestTable));
                     refreshAdmin();
                     refreshDashboard();
-                })
-        );
+                });
+        approveRequestButton.setEnabled(false);
+        requestActions.add(approveRequestButton);
 
         // Approve the selected request with an entered allowance.
-        requestActions.add(
+        customApproveRequestButton =
                 button("Approve with custom minutes", () -> {
                     String id = selectedId(requestTable);
 
-                    int allocation = minutes(
+                    Integer allocation = minutes(
                             "Initial allocation in minutes:", 100
                     );
+                    if (allocation == null) {
+                        return;
+                    }
 
                     service.approve(id, allocation);
                     refreshAdmin();
                     refreshDashboard();
-                })
-        );
+                });
+        customApproveRequestButton.setEnabled(false);
+        requestActions.add(customApproveRequestButton);
 
-        requestActions.add(button("Reject", () -> {
+        rejectRequestButton = button("Reject", () -> {
             service.reject(selectedId(requestTable));
             refreshAdmin();
             refreshDashboard();
-        }));
+        });
+        rejectRequestButton.setEnabled(false);
+        requestActions.add(rejectRequestButton);
 
         requestActions.add(
                 button("Refresh", this::refreshAdmin)
         );
 
         requestPanel.add(requestActions, BorderLayout.SOUTH);
+        requestStatusFilter.addActionListener(event -> {
+            String status = String.valueOf(
+                    requestStatusFilter.getSelectedItem()
+            );
+            requestSorter.setRowFilter("All statuses".equals(status)
+                    ? null
+                    : RowFilter.regexFilter(
+                            "^" + java.util.regex.Pattern.quote(status) + "$",
+                            4
+                    ));
+        });
+        requestTable.getSelectionModel().addListSelectionListener(event -> {
+            if (!event.getValueIsAdjusting()) {
+                boolean pending = selectedRequestIsPending(requestTable);
+                approveRequestButton.setEnabled(pending);
+                rejectRequestButton.setEnabled(pending);
+                customApproveRequestButton.setEnabled(pending);
+            }
+        });
+
         // Student lookup and allowance management.
         students = model(
                 "University ID", "Name", "Email", "Phone",
@@ -603,10 +857,18 @@ public final class AccountFrame extends JFrame {
 
         searchBar.add(button("Grant extra time", () -> {
             String id = search.getText().trim();
-            int value = minutes("Additional minutes:", 30);
+            Integer value = minutes("Additional minutes:", 30);
+            if (value == null) {
+                return;
+            }
             String note = reason();
             if (note == null) {
                 return;
+            }
+            if (note.trim().isEmpty()) {
+                throw new IllegalArgumentException(
+                        "A reason for the allowance change is required."
+                );
             }
 
             service.grantExtraTime(id, value, note);
@@ -619,14 +881,22 @@ public final class AccountFrame extends JFrame {
         searchBar.add(button("Set total allocation", () -> {
             String id = search.getText().trim();
 
-            int value = minutes(
+            Integer value = minutes(
                     "New TOTAL allocation:",
                     service.getAllowance(id).getAllocated()
             );
+            if (value == null) {
+                return;
+            }
 
             String note = reason();
             if (note == null) {
                 return;
+            }
+            if (note.trim().isEmpty()) {
+                throw new IllegalArgumentException(
+                        "A reason for the allowance change is required."
+                );
             }
             service.setAllocation(id, value, note);
 
@@ -649,13 +919,22 @@ public final class AccountFrame extends JFrame {
                                         studentTable.getModel().getValueAt(row, 0)
                                 )
                         );
+                        try {
+                            showStudentDetails();
+                        } catch (IOException exception) {
+                            JOptionPane.showMessageDialog(
+                                    this,
+                                    "File operation failed: "
+                                            + exception.getMessage(),
+                                    "Unable to load student",
+                                    JOptionPane.ERROR_MESSAGE
+                            );
+                        }
                     }
                 });
 
         details.setEditable(false);
-        details.setFont(
-                new Font(Font.MONOSPACED, Font.PLAIN, 13)
-        );
+        details.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 14));
 
         // The upper section shows students; the lower section shows details.
         JSplitPane split = new JSplitPane(
@@ -690,7 +969,7 @@ public final class AccountFrame extends JFrame {
                 new Color(224, 238, 247));
         utilizationMetric = new MetricCard("Utilization", "N/A",
                 new Color(250, 239, 218));
-        dashboardSummary = new JPanel(new GridLayout(1, 6, 10, 0));
+        dashboardSummary = new JPanel(new GridLayout(0, 3, 10, 10));
         dashboardSummary.setBackground(BACKGROUND);
         dashboardSummary.add(queuedMetric);
         dashboardSummary.add(runningMetric);
@@ -702,18 +981,32 @@ public final class AccountFrame extends JFrame {
         gpuCards = new JPanel(new GridLayout(1, 4, 12, 0));
         gpuCards.setBackground(BACKGROUND);
         dashboardJobs = model(
-                "ID", "Student", "Application", "Task size",
-                "Workload units", "Estimated duration", "Status",
-                "Queue position", "Predicted start",
-                "Predicted finish", "Remaining wait", "GPU",
-                "Submission time", "Actual start", "Actual finish",
-                "Runtime used", "Total queue wait",
-                "Allowance charged", "Result",
-                "Cancelled at", "Cancelled by", "Reason"
+                "ID", "Student", "Application", "Status", "Queue position",
+                "Predicted start", "Predicted finish", "Remaining wait"
+        );
+        waitingJobs = model(
+                "ID", "Student", "Application", "Status", "Queue position",
+                "Predicted start", "Predicted finish", "Remaining wait"
+        );
+        completedJobs = model(fullJobColumns());
+        allJobs = model(fullJobColumns());
+        balances = model(
+                "University ID", "Student name", "Allocated minutes",
+                "Used minutes", "Reserved minutes", "Available minutes"
         );
 
         JTable dashboardJobTable = table(dashboardJobs);
         dashboardJobTable.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
+        waitingJobsTable = table(waitingJobs);
+        waitingJobsTable.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
+        completedJobsTable = table(completedJobs);
+        completedJobsTable.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
+        allJobsTable = table(allJobs);
+        allJobsTable.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
+        JTable balancesTable = table(balances);
+        balancesTable.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
+        allJobSorter = new TableRowSorter<>(allJobs);
+        allJobsTable.setRowSorter(allJobSorter);
 
         JPanel dashboardControls = cardPanel(new FlowLayout(FlowLayout.LEFT));
         dashboardControls.setBackground(Color.WHITE);
@@ -755,18 +1048,66 @@ public final class AccountFrame extends JFrame {
         gpuPanel.add(new JLabel("Four GPU devices"), BorderLayout.NORTH);
         gpuPanel.add(gpuCards, BorderLayout.CENTER);
 
-        dashboardBalances = new JLabel();
-        dashboardBalances.setForeground(MUTED);
         JPanel balancePanel = cardPanel(new BorderLayout());
         balancePanel.add(new JLabel("Student available balances"),
                 BorderLayout.NORTH);
-        balancePanel.add(dashboardBalances, BorderLayout.CENTER);
+        balancePanel.add(new JScrollPane(balancesTable), BorderLayout.CENTER);
 
         JPanel jobPanel = cardPanel(new BorderLayout(8, 8));
-        jobPanel.add(new JLabel(
-                "Jobs · predicted schedule and recorded execution history"
-        ), BorderLayout.NORTH);
+        jobPanel.add(new JLabel("Waiting jobs · predicted schedule"),
+                BorderLayout.NORTH);
         jobPanel.add(new JScrollPane(dashboardJobTable), BorderLayout.CENTER);
+
+        JPanel waitingPanel = cardPanel(new BorderLayout(8, 8));
+        waitingPanel.add(new JLabel(
+                "Waiting queue · FCFS order and predicted start/finish times"
+        ), BorderLayout.NORTH);
+        waitingPanel.add(new JScrollPane(waitingJobsTable), BorderLayout.CENTER);
+
+        JPanel completedPanel = cardPanel(new BorderLayout(8, 8));
+        completedPanel.add(new JLabel(
+                "Completed job records · actual execution and allowance charges"
+        ), BorderLayout.NORTH);
+        completedPanel.add(new JScrollPane(completedJobsTable),
+                BorderLayout.CENTER);
+
+        allJobSearch = new JTextField(18);
+        allJobStatusFilter = new JComboBox<>(new String[]{
+                "All statuses", "QUEUED", "RUNNING", "COMPLETED", "CANCELLED"
+        });
+        allJobSearch.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        allJobStatusFilter.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        JPanel allJobFilters = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        allJobFilters.setBackground(Color.WHITE);
+        allJobFilters.add(new JLabel("Search ID, student, or application:"));
+        allJobFilters.add(allJobSearch);
+        allJobFilters.add(button("Search", this::updateAllJobFilter));
+        allJobFilters.add(new JLabel("Status:"));
+        allJobFilters.add(allJobStatusFilter);
+        JButton allJobCancel = button("Cancel selected job", () -> {
+            cancelSelectedJob(allJobsTable);
+            refreshDashboard();
+            refreshAdmin();
+        });
+        allJobCancel.setEnabled(false);
+        allJobFilters.add(allJobCancel);
+        JPanel allJobPanel = cardPanel(new BorderLayout(8, 8));
+        allJobPanel.add(allJobFilters, BorderLayout.NORTH);
+        allJobPanel.add(new JScrollPane(allJobsTable), BorderLayout.CENTER);
+        allJobSorter.addRowSorterListener(event ->
+                allJobCancel.setEnabled(
+                        selectedJobCanBeCancelled(allJobsTable)
+                )
+        );
+        allJobsTable.getSelectionModel().addListSelectionListener(event -> {
+            if (!event.getValueIsAdjusting()) {
+                allJobCancel.setEnabled(
+                        selectedJobCanBeCancelled(allJobsTable)
+                );
+            }
+        });
+        allJobSearch.addActionListener(event -> updateAllJobFilter());
+        allJobStatusFilter.addActionListener(event -> updateAllJobFilter());
 
         JPanel dashboardBody = new JPanel();
         dashboardBody.setLayout(new BoxLayout(dashboardBody, BoxLayout.Y_AXIS));
@@ -789,6 +1130,9 @@ public final class AccountFrame extends JFrame {
         JPanel screens = new JPanel(screenLayout);
         screens.setBackground(BACKGROUND);
         screens.add(dashboard, "overview");
+        screens.add(waitingPanel, "waiting");
+        screens.add(completedPanel, "completed");
+        screens.add(allJobPanel, "all-jobs");
         screens.add(requestPanel, "requests");
         screens.add(studentPanel, "students");
 
@@ -803,10 +1147,14 @@ public final class AccountFrame extends JFrame {
         sidebar.add(brand);
 
         JButton overviewNav = navigationButton("Overview", true);
+        JButton waitingNav = navigationButton("Waiting jobs", false);
+        JButton completedNav = navigationButton("Completed jobs", false);
+        JButton allJobsNav = navigationButton("All jobs", false);
         JButton requestsNav = navigationButton("Registration requests", false);
         JButton studentsNav = navigationButton("Students & allowances", false);
         for (JButton nav : new JButton[]{
-                overviewNav, requestsNav, studentsNav
+                overviewNav, waitingNav, completedNav, allJobsNav,
+                requestsNav, studentsNav
         }) {
             nav.setAlignmentX(Component.LEFT_ALIGNMENT);
             nav.setMaximumSize(new Dimension(Integer.MAX_VALUE, 48));
@@ -815,15 +1163,33 @@ public final class AccountFrame extends JFrame {
 
         overviewNav.addActionListener(event -> {
             screenLayout.show(screens, "overview");
-            selectNavigation(overviewNav, overviewNav, requestsNav, studentsNav);
+            selectNavigation(overviewNav, overviewNav, waitingNav,
+                    completedNav, allJobsNav, requestsNav, studentsNav);
+        });
+        waitingNav.addActionListener(event -> {
+            screenLayout.show(screens, "waiting");
+            selectNavigation(waitingNav, overviewNav, waitingNav,
+                    completedNav, allJobsNav, requestsNav, studentsNav);
+        });
+        completedNav.addActionListener(event -> {
+            screenLayout.show(screens, "completed");
+            selectNavigation(completedNav, overviewNav, waitingNav,
+                    completedNav, allJobsNav, requestsNav, studentsNav);
+        });
+        allJobsNav.addActionListener(event -> {
+            screenLayout.show(screens, "all-jobs");
+            selectNavigation(allJobsNav, overviewNav, waitingNav,
+                    completedNav, allJobsNav, requestsNav, studentsNav);
         });
         requestsNav.addActionListener(event -> {
             screenLayout.show(screens, "requests");
-            selectNavigation(requestsNav, overviewNav, requestsNav, studentsNav);
+            selectNavigation(requestsNav, overviewNav, waitingNav,
+                    completedNav, allJobsNav, requestsNav, studentsNav);
         });
         studentsNav.addActionListener(event -> {
             screenLayout.show(screens, "students");
-            selectNavigation(studentsNav, overviewNav, requestsNav, studentsNav);
+            selectNavigation(studentsNav, overviewNav, waitingNav,
+                    completedNav, allJobsNav, requestsNav, studentsNav);
         });
 
         sidebar.add(Box.createVerticalGlue());
@@ -863,8 +1229,18 @@ public final class AccountFrame extends JFrame {
                     request.getStatus()
             });
         }
+        approveRequestButton.setEnabled(
+                selectedRequestIsPending(requestTable)
+        );
+        customApproveRequestButton.setEnabled(
+                selectedRequestIsPending(requestTable)
+        );
+        rejectRequestButton.setEnabled(
+                selectedRequestIsPending(requestTable)
+        );
 
         students.setRowCount(0);
+        balances.setRowCount(0);
 
         for (Student student : service.getStudents()) {
             TimeAllowance allowance =
@@ -880,7 +1256,20 @@ public final class AccountFrame extends JFrame {
                     allowance.getReserved(),
                     allowance.getAvailable()
             });
+            balances.addRow(new Object[]{
+                    student.getUniversityId(),
+                    student.getName(),
+                    allowance.getAllocated(),
+                    allowance.getUsed(),
+                    allowance.getReserved(),
+                    allowance.getAvailable()
+            });
         }
+    }
+
+    private void updateStudentJobFilter() {
+        updateTableFilter(studentJobSorter, studentJobSearch,
+                studentJobStatusFilter, 6, 0, 1);
     }
 
     private void refreshDashboard() throws IOException {
@@ -888,6 +1277,9 @@ public final class AccountFrame extends JFrame {
         long[] counts = new long[Job.Status.values().length];
 
         dashboardJobs.setRowCount(0);
+        waitingJobs.setRowCount(0);
+        completedJobs.setRowCount(0);
+        allJobs.setRowCount(0);
         gpuCards.removeAll();
 
         for (GPU gpu : jobs.getGpus()) {
@@ -917,45 +1309,24 @@ public final class AccountFrame extends JFrame {
         for (Job job : jobs.getJobs()) {
             counts[job.getStatus().ordinal()]++;
             Prediction prediction = predictions.get(job.getId());
-            long runtime = job.getStartTime() == null
-                    ? 0
-                    : java.time.temporal.ChronoUnit.MINUTES.between(
-                            job.getStartTime(),
-                            job.getFinishTime() == null
-                                    ? jobs.getNow()
-                                    : job.getFinishTime()
-                    );
-            Long queueWait = job.getStartTime() == null
-                    ? null
-                    : java.time.temporal.ChronoUnit.MINUTES.between(
-                            job.getSubmissionTime(), job.getStartTime()
-                    );
-
-            dashboardJobs.addRow(new Object[]{
-                    job.getId(),
-                    job.getStudentId(),
-                    job.getApplication(),
-                    job.getTaskSize(),
-                    job.getWorkloadUnits(),
-                    job.getDuration() + " min",
-                    job.getStatus(),
-                    prediction == null ? "-" : prediction.queuePosition(),
-                    prediction == null ? "-" : time(prediction.start()),
-                    prediction == null ? "-" : time(prediction.finish()),
-                    prediction == null ? "-" : prediction.remainingWait(),
-                    job.getGpuId() == null ? "-" : job.getGpuId(),
-                    time(job.getSubmissionTime()),
-                    time(job.getStartTime()),
-                    time(job.getFinishTime()),
-                    runtime,
-                    queueWait == null ? "-" : queueWait,
-                    job.getChargedMinutes(),
-                    job.getResult() == null ? "-" : job.getResult(),
-                    time(job.getCancellationTime()),
-                    job.getCancelledBy() == null ? "-" : job.getCancelledBy(),
-                    job.getCancellationReason() == null
-                            ? "-" : job.getCancellationReason()
-            });
+            allJobs.addRow(jobRow(job, prediction));
+            if (job.getStatus() == Job.Status.COMPLETED) {
+                completedJobs.addRow(jobRow(job, prediction));
+            }
+            if (job.getStatus() == Job.Status.QUEUED) {
+                Object[] waitingRow = {
+                        job.getId(),
+                        job.getStudentId(),
+                        job.getApplication(),
+                        job.getStatus(),
+                        prediction == null ? "-" : prediction.queuePosition(),
+                        prediction == null ? "-" : time(prediction.start()),
+                        prediction == null ? "-" : time(prediction.finish()),
+                        prediction == null ? "-" : prediction.remainingWait()
+                };
+                dashboardJobs.addRow(waitingRow);
+                waitingJobs.addRow(waitingRow);
+            }
         }
 
         String utilization = jobs.getUtilization().isEmpty()
@@ -969,23 +1340,12 @@ public final class AccountFrame extends JFrame {
         busyMetric.setValue(counts[1] + " / 4");
         utilizationMetric.setValue(utilization);
         clockLabel.setText("Simulation time: " + time(jobs.getNow()));
+        updateAllJobFilter();
+    }
 
-        StringBuilder balances = new StringBuilder("Balances: ");
-        List<Student> allStudents = service.getStudents();
-        for (int i = 0; i < allStudents.size(); i++) {
-            Student student = allStudents.get(i);
-            TimeAllowance allowance =
-                    service.getAllowance(student.getUniversityId());
-            if (i > 0) {
-                balances.append(" | ");
-            }
-            balances.append(student.getUniversityId())
-                    .append(": ")
-                    .append(allowance.getAvailable())
-                    .append(" available");
-        }
-
-        dashboardBalances.setText(balances.toString());
+    private void updateAllJobFilter() {
+        updateTableFilter(allJobSorter, allJobSearch,
+                allJobStatusFilter, 6, 0, 1, 2);
     }
 
     private void selectNavigation(
@@ -1193,25 +1553,31 @@ public final class AccountFrame extends JFrame {
                 "Cancelled at", "Cancelled by", "Cancellation reason"
         );
         JTable table = table(studentJobs);
+        studentJobsTable = table;
         table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
         TableRowSorter<DefaultTableModel> sorter =
                 new TableRowSorter<>(studentJobs);
         table.setRowSorter(sorter);
+        studentJobSorter = sorter;
 
-        JTextField jobSearch = new JTextField(22);
+        studentJobSearch = new JTextField(18);
         JButton searchButton = new JButton("Search jobs");
-        searchButton.addActionListener(event -> {
-            String value = jobSearch.getText().trim();
-            sorter.setRowFilter(value.isEmpty()
-                    ? null
-                    : RowFilter.regexFilter(
-                            "(?i)" + java.util.regex.Pattern.quote(value)
-                    ));
+        studentJobStatusFilter = new JComboBox<>(new String[]{
+                "All statuses", "QUEUED", "RUNNING", "COMPLETED", "CANCELLED"
         });
+        studentJobStatusFilter.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        studentJobSearch.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        searchButton.addActionListener(event -> updateStudentJobFilter());
+        studentJobSearch.addActionListener(event -> updateStudentJobFilter());
+        studentJobStatusFilter.addActionListener(
+                event -> updateStudentJobFilter()
+        );
 
         JPanel searchBar = new JPanel(new FlowLayout(FlowLayout.LEFT));
         searchBar.add(new JLabel("Search own jobs:"));
-        searchBar.add(jobSearch);
+        searchBar.add(studentJobSearch);
+        searchBar.add(new JLabel("Status:"));
+        searchBar.add(studentJobStatusFilter);
         searchBar.add(searchButton);
         studentCancelButton = button("Cancel selected job", () -> {
             cancelSelectedJob(table);
@@ -1222,6 +1588,7 @@ public final class AccountFrame extends JFrame {
 
         studentJobDetails = new JTextArea(5, 40);
         studentJobDetails.setEditable(false);
+        studentJobDetails.setFont(new Font("Segoe UI", Font.PLAIN, 14));
         studentJobDetails.setLineWrap(true);
         studentJobDetails.setWrapStyleWord(true);
         table.getSelectionModel().addListSelectionListener(event -> {
@@ -1382,6 +1749,10 @@ public final class AccountFrame extends JFrame {
                             ? "-" : job.getCancellationReason()
             });
         }
+        studentCancelButton.setEnabled(
+                selectedJobCanBeCancelled(studentJobsTable)
+        );
+        updateStudentJobFilter();
     }
 
     private void submitStudentJob() throws IOException {
