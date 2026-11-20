@@ -144,10 +144,27 @@ public final class AccountService {
                 ? administrator
                 : state.students.get(id);
 
-        if (candidate == null || !candidate.matchesPassword(password)) {
+        if (candidate == null) {
+            AccessRequest request = state.requests.get(id);
+            if (request != null
+                    && request.getStatus() == AccessRequest.Status.PENDING) {
+                throw new IllegalArgumentException(
+                        "Your registration is pending administrator approval."
+                );
+            }
+            if (request != null
+                    && request.getStatus() == AccessRequest.Status.REJECTED) {
+                throw new IllegalArgumentException(
+                        "Your registration request was rejected."
+                );
+            }
             throw new IllegalArgumentException(
-                    "Invalid credentials or account not approved."
+                    "Invalid username or password."
             );
+        }
+
+        if (!candidate.matchesPassword(password)) {
+            throw new IllegalArgumentException("Invalid username or password.");
         }
 
         // Remembers who is currently signed in.
