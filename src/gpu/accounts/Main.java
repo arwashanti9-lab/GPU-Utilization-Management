@@ -1,7 +1,9 @@
 package gpu.accounts;
 
+import gpu.scheduling.JobService;
+import gpu.scheduling.Scheduler;
+
 import java.nio.file.*;
-import java.util.*;
 import javax.swing.*;
 
 //Starts the application and opens the login window.
@@ -16,24 +18,35 @@ public final class Main {
                         UIManager.getSystemLookAndFeelClassName()
                 );
 
-                // Uses the default account file unless another path is supplied.
-                Path file = Paths.get(
+                Path accountFile = Paths.get(
                         args.length == 0
                                 ? "data/accounts.dat"
                                 : args[0]
                 );
-                
-                // Creates an AccountService that reads and saves accounts using this file.
+
                 AccountService service = new AccountService(
-                        new FileAccountRepository(file)
+                        new FileAccountRepository(accountFile)
                 );
 
-                // TEMPORARY CODE.
-                JobHistoryProvider jobs = id -> List.of(
-                        "Job module has not been connected yet."
+                Path schedulerFile = Paths.get(
+                        args.length < 2
+                                ? "data/simulation.dat"
+                                : args[1]
                 );
 
-                // Creates and displays the application window.
+                boolean newSimulation = !Files.exists(schedulerFile);
+                Scheduler scheduler = newSimulation
+                        ? new Scheduler()
+                        : Scheduler.load(schedulerFile);
+
+                JobService jobs = new JobService(
+                        service, scheduler, schedulerFile
+                );
+
+                if (newSimulation) {
+                    jobs.save();
+                }
+
                 new AccountFrame(service, jobs).setVisible(true);
 
             } catch (Exception exception) {
@@ -50,4 +63,5 @@ public final class Main {
             }
         });
     }
+
 }
