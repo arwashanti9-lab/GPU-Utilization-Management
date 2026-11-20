@@ -9,6 +9,8 @@ units are not NVIDIA H100 performance measurements.
 - Student registration with administrator approval and account balances.
 - Admin allowance adjustments with recorded reasons.
 - Student job submission, history search, and cancellation.
+- Role-specific Swing dashboards with a slate navigation rail, four GPU cards,
+  allowance summary cards, and clearly labelled status and history columns.
 - One FCFS queue, deterministic GPU assignment, minute-by-minute simulation,
   predicted starts/finishes, wait times, and utilization.
 - Completed and cancelled job history, including runtime charges and reasons.
@@ -74,14 +76,130 @@ java -cp out gpu.scheduling.SchedulerTest
 java -cp out gpu.scheduling.JobServiceTest
 ```
 
-They cover FCFS ordering, GPU tie-breaking, wait predictions, completion,
-cancellation charges, utilization, allowance settlement, access scoping, and
-snapshot recovery.
+They cover FCFS ordering, GPU tie-breaking, wait predictions, exact and
+insufficient allowances, completion, queued and running cancellation charges,
+utilization, access scoping, and snapshot recovery.
 
 ## Design and class relationships
 
 ```mermaid
 classDiagram
+    class User {
+        -String username
+        -String name
+        -Credential credential
+        +getRole() Role
+        +matchesPassword(password) boolean
+    }
+    class Student {
+        -String email
+        -String phone
+        +getUniversityId() String
+    }
+    class Administrator {
+        +getRole() Role
+    }
+    class AccountService {
+        -AccountRepository repository
+        -AccountState state
+        -User currentUser
+        +register(...)
+        +login(...)
+        +approve(...)
+        +reject(...)
+        +grantExtraTime(...)
+        +reserveForJob(...)
+        +settleForJob(...)
+    }
+    class AccountRepository {
+        <<interface>>
+        +load() byte[]
+        +save(snapshot)
+    }
+    class FileAccountRepository {
+        -Path file
+        +load() byte[]
+        +save(snapshot)
+    }
+    class AccountState {
+        +students Map
+        +requests Map
+        +allowances Map
+        +changes List
+        +jobReservations Map
+        +settledJobs Set
+    }
+    class AccessRequest {
+        -Student applicant
+        -Status status
+        +decide(status)
+    }
+    class TimeAllowance {
+        -int allocated
+        -int used
+        -int reserved
+        +getAvailable() int
+        +reserve(minutes)
+        +settle(reservation, charge)
+    }
+    class AllowanceChange {
+        -String studentId
+        -String administrator
+        -String reason
+        -int before
+        -int after
+    }
+    class JobService {
+        -AccountService accounts
+        -Scheduler scheduler
+        -Path snapshot
+        +submitJob(...) String
+        +cancelJob(...)
+        +advanceMinute()
+    }
+    class Scheduler {
+        -LocalDateTime initialTime
+        -LocalDateTime now
+        -Map jobs
+        +advanceMinute()
+        +predictions() Map
+        +getUtilization() OptionalDouble
+        +save(Path)
+        +load(Path) Scheduler
+    }
+    class Job {
+        -String id
+        -String studentId
+        -String title
+        -String application
+        -String description
+        -int duration
+        -Status status
+        -Integer gpuId
+        -LocalDateTime submissionTime
+        -LocalDateTime started
+        -LocalDateTime finished
+        -int charged
+    }
+    class GPU {
+        +int id
+        +String jobId
+        +long remainingMinutes
+        +LocalDateTime expectedFinish
+    }
+    class Prediction {
+        +int queuePosition
+        +int gpuId
+        +LocalDateTime start
+        +LocalDateTime finish
+        +long remainingWait
+    }
+    class AccountFrame {
+        -AccountService service
+        -JobService jobs
+        +showAdmin()
+        +showStudent()
+    }
     User <|-- Student
     User <|-- Administrator
     AccountRepository <|.. FileAccountRepository
@@ -98,7 +216,6 @@ classDiagram
     Scheduler ..> Prediction
     AccountFrame --> AccountService
     AccountFrame --> JobService
-    Main --> AccountFrame
 ```
 
 - `User`, `Student`, and `Administrator` demonstrate inheritance and
