@@ -11,8 +11,6 @@ import java.util.stream.Collectors;
 
 // Simulates four GPUs using one First Come First Served queue.
 // All execution uses the simulation clock. The computer's real clock never advances jobs automatically.
-// TEAM CONNECTION: Person 2 must check permissions and reserve allowance before calling acceptReservedJob(). DONT FORGET THIS!! PS:induja
-// This class calculates final charges. Person 2's allowance service must apply those charges exactly once using the job ID.
 public final class Scheduler
         implements Serializable, JobHistoryProvider {
 
@@ -20,7 +18,7 @@ public final class Scheduler
 
     public static final int GPU_COUNT = 4;
 
-    private final LocalDateTime initialTime;
+    private LocalDateTime initialTime;
     private LocalDateTime now;
 
     // LinkedHashMap retains a predictable order for dashboard/history output.
@@ -32,10 +30,27 @@ public final class Scheduler
                     .thenComparing(Job::getId);
 
     public Scheduler(LocalDateTime initialTime) {
-        this.initialTime = Objects.requireNonNull(initialTime)
-                .truncatedTo(ChronoUnit.MINUTES);
+        initializeClock(initialTime);
+    }
 
-        now = this.initialTime;
+    public Scheduler() {
+        initialTime = null;
+        now = null;
+    }
+
+    public synchronized boolean isClockInitialized() {
+        return initialTime != null;
+    }
+
+    public synchronized void initializeClock(LocalDateTime startingTime) {
+        if (isClockInitialized()) {
+            throw new IllegalStateException(
+                    "The simulation clock has already been initialized."
+            );
+        }
+        initialTime = Objects.requireNonNull(startingTime)
+                .truncatedTo(ChronoUnit.MINUTES);
+        now = initialTime;
     }
 
     public synchronized LocalDateTime getNow() {
@@ -43,7 +58,18 @@ public final class Scheduler
     }
 
     public synchronized long getElapsedMinutes() {
+        if (!isClockInitialized()) {
+            return 0;
+        }
         return minutes(initialTime, now);
+    }
+
+    private void requireClock() {
+        if (!isClockInitialized()) {
+            throw new IllegalStateException(
+                    "The simulation clock has not been initialized."
+            );
+        }
     }
 
     private static long minutes(
@@ -63,9 +89,7 @@ public final class Scheduler
         return value.trim();
     }
 
-    //Checks submission data without changing the scheduler.
-    // Person 2 can call this before reserving allowance. !!
-    //Validation, reservation, and acceptance should be coordinated by the application's job service.
+    // Checks submission data without changing the scheduler.
     public synchronized void validateSubmission(
             String id,
             String owner,
@@ -74,6 +98,7 @@ public final class Scheduler
             String description,
             int duration
     ) {
+        requireClock();
         id = required(id);
         required(owner);
         required(title);
@@ -98,10 +123,8 @@ public final class Scheduler
     }
 
     /**
-     * Accepts a job whose full duration has already been reserved.
-     *
-     * In the standalone dashboard, submissions are demonstration data.
-     * In the final application, Person 2 must reserve allowance first.
+     * Adds an already-authorized job to the simulation.
+     * Application submissions are coordinated by JobService.
      */
     public synchronized void acceptReservedJob(
             String id,
@@ -191,6 +214,7 @@ public final class Scheduler
      * jobs are assigned to the newly free GPUs.
      */
     public synchronized void advanceMinute() {
+        requireClock();
         now = now.plusMinutes(1);
 
         for (Job job : jobs.values()) {
@@ -204,6 +228,7 @@ public final class Scheduler
             if (!expectedFinish.isAfter(now)) {
                 job.finished = now;
                 job.charged = job.duration;
+                job.result = "Completed successfully (simulated).";
                 job.status = Job.Status.COMPLETED;
             }
         }
@@ -263,6 +288,7 @@ public final class Scheduler
         job.cancelledAt = now;
         job.cancelledBy = actor;
         job.cancellationReason = reason;
+        job.result = "Cancelled: " + reason;
         job.status = Job.Status.CANCELLED;
 
         // Cancelling a running job may let the next waiting job start now.
@@ -275,6 +301,9 @@ public final class Scheduler
      */
     public synchronized Map<String, Prediction> predictions() {
         Map<String, Prediction> result = new LinkedHashMap<>();
+        if (!isClockInitialized()) {
+            return Collections.unmodifiableMap(result);
+        }
 
         LocalDateTime[] freeAt = new LocalDateTime[GPU_COUNT];
 
