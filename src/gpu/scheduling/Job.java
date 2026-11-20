@@ -1,185 +1,147 @@
 package gpu.scheduling;
 
-import gpu.accounts.AccountService;
-import gpu.accounts.Role;
-import gpu.accounts.User;
+import java.io.Serializable;
+import java.time.LocalDateTime;
 
-import java.io.IOException;
-import java.util.List;
+// Immutable submission details with scheduler-owned execution history.
+public final class Job implements Serializable {
+    private static final long serialVersionUID = 1L;
 
-// Connects job actions with student allowances and the scheduler.
-public class JobService {
-    private final AccountService accounts;
-    private final Scheduler scheduler;
-
-    public JobService(
-            AccountService accounts,
-            Scheduler scheduler
-    ) {
-        if (accounts == null || scheduler == null) {
-            throw new IllegalArgumentException(
-                    "Accounts and scheduler are required."
-            );
-        }
-
-        this.accounts = accounts;
-        this.scheduler = scheduler;
+    public enum Status {
+        QUEUED,
+        RUNNING,
+        COMPLETED,
+        CANCELLED
     }
 
-    // Checks a student's job, reserves its minutes and submits it.
-    // The calling code must save the scheduler after submission.
-    public String submitJob(
-            String title,
-            String application,
-            String description,
-            int duration
-    ) throws IOException {
+    final String id;
+    final String studentId;
+    final String title;
+    final String application;
+    final String description;
+    final int duration;
+    final LocalDateTime submissionTime;
 
-        User user = accounts.getCurrentUser();
+    Status status = Status.QUEUED;
+    Integer gpuId;
+    LocalDateTime started;
+    LocalDateTime finished;
+    LocalDateTime cancelledAt;
+    String cancelledBy;
+    String cancellationReason;
+    String result;
+    int charged;
 
-        // Only a signed-in student can submit jobs.
-        if (user == null || user.getRole() != Role.STUDENT) {
-            throw new SecurityException(
-                    "A student must be logged in to submit a job."
-            );
-        }
-
-        String studentId = user.getUsername();
-        String jobId = nextJobId();
-
-        // Check the job details before changing the balance.
-        scheduler.validateSubmission(
-                jobId,
-                studentId,
-                title,
-                application,
-                description,
-                duration
-        );
-
-        // Reserve the job's full duration.
-        accounts.reserveForJob(
-                studentId,
-                jobId,
-                duration
-        );
-
-        // Add the accepted job to the scheduler.
-        scheduler.acceptReservedJob(
-                jobId,
-                studentId,
-                title,
-                application,
-                description,
-                duration
-        );
-
-        return jobId;
+    Job(String id, String studentId, String title, String application,
+        String description, int duration, LocalDateTime submissionTime) {
+        this.id = id;
+        this.studentId = studentId;
+        this.title = title;
+        this.application = application;
+        this.description = description;
+        this.duration = duration;
+        this.submissionTime = submissionTime;
     }
 
-    // Cancels a job and updates its owner's allowance.
-    public void cancelJob(
-            String jobId,
-            String reason
-    ) throws IOException {
-
-        User user = accounts.getCurrentUser();
-
-        if (user == null) {
-            throw new SecurityException("Login is required.");
-        }
-
-        // The scheduler uses this role to check cancellation permission.
-        boolean admin = user.getRole() == Role.ADMINISTRATOR;
-
-        scheduler.cancel(
-                jobId,
-                user.getUsername(),
-                admin,
-                reason
-        );
-
-        Job job = findJob(jobId);
-
-        // Release the reservation and charge only the runtime used.
-        accounts.settleForJob(
-                job.getId(),
-                job.getChargedMinutes()
-        );
+    Job(Job source) {
+        this.id = source.id;
+        this.studentId = source.studentId;
+        this.title = source.title;
+        this.application = source.application;
+        this.description = source.description;
+        this.duration = source.duration;
+        this.submissionTime = source.submissionTime;
+        this.status = source.status;
+        this.gpuId = source.gpuId;
+        this.started = source.started;
+        this.finished = source.finished;
+        this.cancelledAt = source.cancelledAt;
+        this.cancelledBy = source.cancelledBy;
+        this.cancellationReason = source.cancellationReason;
+        this.result = source.result;
+        this.charged = source.charged;
     }
 
-    // Advances the clock and charges jobs completed during that minute.
-    public void advanceMinute() throws IOException {
-        User user = accounts.getCurrentUser();
+    public String getId() {
+        return id;
+    }
 
-        // Only an administrator can advance the shared clock.
-        if (user == null
-                || user.getRole() != Role.ADMINISTRATOR) {
+    public String getStudentId() {
+        return studentId;
+    }
 
-            throw new SecurityException(
-                    "Administrator login is required to advance time."
-            );
-        }
+    public String getTitle() {
+        return title;
+    }
 
-        // getJobs() returns copies, preserving the previous job states.
-        List<Job> before = scheduler.getJobs();
+    public String getApplication() {
+        return application;
+    }
 
-        scheduler.advanceMinute();
+    public String getDescription() {
+        return description;
+    }
 
-        List<Job> after = scheduler.getJobs();
+    public int getDuration() {
+        return duration;
+    }
 
-        // Find jobs that changed from running to completed.
-        for (Job previous : before) {
-            if (previous.getStatus() != Job.Status.RUNNING) {
-                continue;
-            }
+    public int getWorkloadUnits() {
+        return duration;
+    }
 
-            for (Job current : after) {
-                if (current.getId().equals(previous.getId())
-                        && current.getStatus() == Job.Status.COMPLETED) {
-
-                    accounts.settleForJob(
-                            current.getId(),
-                            current.getChargedMinutes()
-                    );
-                }
-            }
+    public String getTaskSize() {
+        switch (duration) {
+            case 5:
+                return "Small";
+            case 15:
+                return "Medium";
+            case 30:
+                return "Large";
+            case 60:
+                return "Very large";
+            default:
+                throw new IllegalStateException("Unsupported job duration.");
         }
     }
 
-    // Finds the job with the given ID.
-    private Job findJob(String id) {
-        for (Job job : scheduler.getJobs()) {
-            if (job.getId().equals(id.trim())) {
-                return job;
-            }
-        }
-
-        throw new IllegalArgumentException("Job not found.");
+    public LocalDateTime getSubmissionTime() {
+        return submissionTime;
     }
 
-    // Generates the next ID in the format JOB-000001.
-    private String nextJobId() {
-        int highest = 0;
+    public Status getStatus() {
+        return status;
+    }
 
-        for (Job job : scheduler.getJobs()) {
-            String id = job.getId();
+    public Integer getGpuId() {
+        return gpuId;
+    }
 
-            if (id.matches("JOB-[0-9]{6}")) {
-                int number = Integer.parseInt(id.substring(4));
+    public LocalDateTime getStartTime() {
+        return started;
+    }
 
-                if (number > highest) {
-                    highest = number;
-                }
-            }
-        }
+    public LocalDateTime getFinishTime() {
+        return finished;
+    }
 
-        if (highest >= 999999) {
-            throw new IllegalStateException(
-                    "No more job IDs available."
-            );
-        }
+    public LocalDateTime getCancellationTime() {
+        return cancelledAt;
+    }
 
-        return String.format("JOB-%06d", highest + 1);
+    public String getCancelledBy() {
+        return cancelledBy;
+    }
+
+    public String getCancellationReason() {
+        return cancellationReason;
+    }
+
+    public String getResult() {
+        return result;
+    }
+
+    public int getChargedMinutes() {
+        return charged;
     }
 }
