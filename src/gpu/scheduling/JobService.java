@@ -87,6 +87,18 @@ public final class JobService {
         scheduler.save(snapshot);
     }
 
+    public synchronized boolean isClockInitialized() {
+        currentUser();
+        return scheduler.isClockInitialized();
+    }
+
+    public synchronized void initializeClock(LocalDateTime start)
+            throws IOException {
+        requireAdmin();
+        scheduler.initializeClock(start);
+        scheduler.save(snapshot);
+    }
+
     public synchronized void save() throws IOException {
         scheduler.save(snapshot);
     }
