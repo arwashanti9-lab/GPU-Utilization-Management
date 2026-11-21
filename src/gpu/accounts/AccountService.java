@@ -394,6 +394,13 @@ public final class AccountService {
     // Reserves the required minutes after the job details and task size are checked.
     public void reserveForJob(String studentId, String jobId,
                               int duration) throws IOException {
+        // Only the four project task sizes can be reserved.
+        if (duration != 5 && duration != 15
+        && duration != 30 && duration != 60) {
+    throw new IllegalArgumentException(
+            "Job duration must be 5, 15, 30, or 60 minutes."
+    );
+}
 
         findStudent(studentId);
         String key = required(jobId, "Job ID");
@@ -417,7 +424,9 @@ public final class AccountService {
     // If the job is finished, charge its full runtime.
     // If the job is cancelled while waiting, charge no minutes.
     // If the job is cancelled while running, charge only the minutes used.
+    // Releases the reservation and charges the job once.
     public void settleForJob(String jobId, int charge) throws IOException {
+        String key= required(jobId, "Job Id");
         String owner = state.jobOwners.get(jobId);
 
         if (owner == null) {
