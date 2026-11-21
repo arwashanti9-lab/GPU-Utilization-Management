@@ -1194,7 +1194,7 @@ public final class AccountFrame extends JFrame {
                     "Set the simulation clock before approving accounts."
             );
         }
-        service.approve(id, minutes, jobs.getNow());
+        service.approve(id, minutes);
         refreshAdminData();
     }
 
@@ -1286,9 +1286,9 @@ public final class AccountFrame extends JFrame {
                     "A reason for the allowance change is required."
             );
         }
-        service.grantExtraTime(
-                selectedStudentId, minutes, reason, jobs.getNow()
-        );
+        
+        service.grantExtraTime(selectedStudentId, minutes, reason);
+        
         grantReason.setText("");
         refreshAdminData();
     }
