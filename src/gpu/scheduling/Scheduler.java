@@ -24,7 +24,8 @@ public final class Scheduler
     // LinkedHashMap retains a predictable order for dashboard/history output.
     private final Map<String, Job> jobs = new LinkedHashMap<>();
 
-    // Jobs submitted in the same minute are ordered by job ID.
+    // Several jobs can arrive during one simulated minute. The job ID breaks
+    // that tie so saving and reloading cannot change which queued job goes first.
     private static final Comparator<Job> FCFS =
             Comparator.comparing(Job::getSubmissionTime)
                     .thenComparing(Job::getId);
@@ -155,7 +156,8 @@ public final class Scheduler
 
         jobs.put(job.id, job);
 
-        // A new job starts immediately when a GPU is free.
+        // There is no need to wait for Advance Minute if a GPU is already idle.
+        // dispatch() still checks the whole queue, so older waiting jobs go first.
         dispatch();
     }
 
@@ -215,6 +217,8 @@ public final class Scheduler
      */
     public synchronized void advanceMinute() {
         requireClock();
+        // This is the only operation that moves an initialized clock forward.
+        // Waiting a minute in real life has no effect on the simulated jobs.
         now = now.plusMinutes(1);
 
         for (Job job : jobs.values()) {
@@ -307,7 +311,9 @@ public final class Scheduler
 
         LocalDateTime[] freeAt = new LocalDateTime[GPU_COUNT];
 
-        // A currently idle GPU can begin a job at the current time.
+        // These are forecast times, not the real GPU assignments. Each queued
+        // job updates this copy so the next prediction includes the jobs ahead.
+        // An idle GPU can take work immediately, so it starts with freeAt = now.
         Arrays.fill(freeAt, now);
 
         for (Job job : jobs.values()) {
@@ -458,6 +464,8 @@ public final class Scheduler
             return OptionalDouble.empty();
         }
 
+        // Four GPUs running for ten minutes could provide forty GPU minutes.
+        // Divide actual execution by that capacity; queueing uses no GPU time.
         double utilization =
                 100.0 * getBusyMinutes()
                         / (GPU_COUNT * (double) elapsed);
@@ -489,6 +497,8 @@ public final class Scheduler
                 output.writeObject(this);
             }
 
+            // Replace the old snapshot only after the new one is fully written.
+            // If the disk write fails earlier, the previous snapshot is kept.
             try {
                 Files.move(
                         temporary,
