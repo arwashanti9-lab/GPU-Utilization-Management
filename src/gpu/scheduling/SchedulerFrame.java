@@ -189,6 +189,7 @@ public final class SchedulerFrame extends JFrame {
         button.addActionListener(event -> {
             try {
                 action.run();
+                // Refresh together so the clock, queue waits and GPU rows agree.
                 refresh();
             } catch (Exception exception) {
                 showError(exception);
@@ -358,6 +359,8 @@ public final class SchedulerFrame extends JFrame {
                                     : finish
                     );
 
+            // Total queue wait stops growing once execution begins. It is shown
+            // for history, but is never included in the runtime charge.
             Long waited = start == null
                     ? null
                     : ChronoUnit.MINUTES.between(
