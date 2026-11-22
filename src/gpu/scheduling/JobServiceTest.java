@@ -137,7 +137,25 @@ public final class JobServiceTest {
                     "Cancellation must release the complete reservation.");
             check(firstAllowance.getAvailable() == 13,
                     "Running cancellation returns unspent reserved minutes.");
-            accounts.logout();
+            // Try to settle the cancelled job a second time.
+                    try {accounts.settleForJob(runningJob, 2);
+                        throw new AssertionError("A job must not be settled twice.");
+                } catch (IllegalArgumentException expected) {
+    // The account service should reject the second settlement.
+                            }
+
+        // Check that rejecting the second settlement did not change the balance.
+                TimeAllowance afterSecondAttempt = accounts.getAllowance("S-1");
+
+                check(afterSecondAttempt.getUsed() == 2,
+                        "A second settlement must not charge the student again.");
+
+                    check(afterSecondAttempt.getReserved() == 0,
+                        "A second settlement must not change the reservation.");
+
+                    check(afterSecondAttempt.getAvailable() == 13,
+                        "A second settlement must not change the available balance.");
+     accounts.logout();
 
             accounts.login("admin", "gpu2026");
             for (int i = 0; i < 3; i++) {
